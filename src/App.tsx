@@ -45,6 +45,7 @@ const AUTH_USERNAME = "jatingumber";
 const AUTH_PASSWORD = "23bcs10547";
 const UPLOAD_PASSWORD = "23BCS1054710017";
 const AUTH_STORAGE_KEY = "s3bucket-authenticated";
+const DIRECT_BACKEND_BASE_URL = "http://localhost:3001/api";
 
 const readJsonResponse = async (response: Response) => {
   const text = await response.text();
@@ -58,6 +59,27 @@ const readJsonResponse = async (response: Response) => {
   } catch {
     throw new Error(`Server returned an invalid response (${response.status}).`);
   }
+};
+
+const buildUploadTargets = () => {
+  const targets = [`${apiBaseUrl}/upload`];
+
+  if (!apiBaseUrl.startsWith("http://localhost:3001")) {
+    targets.push(`${DIRECT_BACKEND_BASE_URL}/upload`);
+  }
+
+  return [...new Set(targets)];
+};
+
+const createUploadError = async (response: Response) => {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    const payload = await readJsonResponse(response);
+    return new Error(payload?.error || `Failed to upload the file (${response.status}).`);
+  }
+
+  return new Error(`Failed to upload the file (${response.status}).`);
 };
 
 function App() {
@@ -86,7 +108,7 @@ function App() {
       return "Choose a document, PDF, image, or media file and send it safely to your AWS S3 bucket.";
     }
 
-    return `${selectedFile.name} • ${formatFileSize(selectedFile.size)} • ${selectedFile.type || "unknown type"}`;
+    return `${selectedFile.name} | ${formatFileSize(selectedFile.size)} | ${selectedFile.type || "unknown type"}`;
   }, [selectedFile]);
 
   const stats = useMemo(
@@ -153,19 +175,36 @@ function App() {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      const uploadResponse = await fetch(`${apiBaseUrl}/upload`, {
-        method: "POST",
-        body: formData,
-      });
+      let uploadPayload: { error?: string; fileUrl?: string; objectKey?: string } | null = null;
+      let uploadSucceeded = false;
+      let lastError: Error | null = null;
 
-      const uploadPayload = await readJsonResponse(uploadResponse);
+      for (const target of buildUploadTargets()) {
+        try {
+          const uploadResponse = await fetch(target, {
+            method: "POST",
+            body: formData,
+          });
 
-      if (!uploadResponse.ok) {
-        throw new Error(uploadPayload?.error || `Failed to upload the file (${uploadResponse.status}).`);
+          if (!uploadResponse.ok) {
+            throw await createUploadError(uploadResponse);
+          }
+
+          uploadPayload = await readJsonResponse(uploadResponse);
+
+          if (!uploadPayload?.fileUrl || !uploadPayload?.objectKey) {
+            throw new Error("Server did not return the uploaded file details.");
+          }
+
+          uploadSucceeded = true;
+          break;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error("Upload failed.");
+        }
       }
 
-      if (!uploadPayload?.fileUrl || !uploadPayload?.objectKey) {
-        throw new Error("Server did not return the uploaded file details.");
+      if (!uploadSucceeded || !uploadPayload?.fileUrl || !uploadPayload?.objectKey) {
+        throw lastError || new Error("Upload failed.");
       }
 
       setUploadResult({
