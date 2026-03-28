@@ -63,8 +63,11 @@ const readJsonResponse = async (response: Response) => {
 
 const buildUploadTargets = () => {
   const targets = [`${apiBaseUrl}/upload`];
+  const isLocalHost =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 
-  if (!apiBaseUrl.startsWith("http://localhost:3001")) {
+  if (isLocalHost && !apiBaseUrl.startsWith("http://localhost:3001")) {
     targets.push(`${DIRECT_BACKEND_BASE_URL}/upload`);
   }
 
