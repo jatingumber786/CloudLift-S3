@@ -3,15 +3,19 @@ import type { ChangeEvent } from "react";
 import {
   ArrowRight,
   CheckCircle2,
+  CheckSquare,
   LockKeyhole,
   LogOut,
   CloudUpload,
   Code2,
+  Trash2,
   FileText,
   Github,
+  Images,
   LoaderCircle,
   Mail,
   MoonStar,
+  RefreshCcw,
   ShieldCheck,
   Sparkles,
   SunMedium,
@@ -39,6 +43,12 @@ type UploadResult = {
   objectKey: string;
 };
 
+type GalleryItem = {
+  fileUrl: string;
+  objectKey: string;
+  lastModified: string | null;
+};
+
 type Theme = "light" | "dark";
 
 const AUTH_USERNAME = "jatingumber";
@@ -61,14 +71,14 @@ const readJsonResponse = async (response: Response) => {
   }
 };
 
-const buildUploadTargets = () => {
-  const targets = [`${apiBaseUrl}/upload`];
+const buildApiTargets = (path: string) => {
+  const targets = [`${apiBaseUrl}/${path}`];
   const isLocalHost =
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 
   if (isLocalHost && !apiBaseUrl.startsWith("http://localhost:3001")) {
-    targets.push(`${DIRECT_BACKEND_BASE_URL}/upload`);
+    targets.push(`${DIRECT_BACKEND_BASE_URL}/${path}`);
   }
 
   return [...new Set(targets)];
@@ -96,6 +106,10 @@ function App() {
   const [authError, setAuthError] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [uploadPassword, setUploadPassword] = useState("");
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
+  const [isGalleryLoading, setIsGalleryLoading] = useState(false);
+  const [selectedGalleryKeys, setSelectedGalleryKeys] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -105,6 +119,12 @@ function App() {
     const savedAuth = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
     setIsAuthenticated(savedAuth === "true");
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      void loadGallery();
+    }
+  }, [isAuthenticated]);
 
   const fileSummary = useMemo(() => {
     if (!selectedFile) {
@@ -139,6 +159,42 @@ function App() {
     setUploadResult(null);
   };
 
+  const loadGallery = async () => {
+    setIsGalleryLoading(true);
+
+    try {
+      let loadedItems: GalleryItem[] | null = null;
+      let lastError: Error | null = null;
+
+      for (const target of buildApiTargets("gallery")) {
+        try {
+          const response = await fetch(target);
+
+          if (!response.ok) {
+            throw await createUploadError(response);
+          }
+
+          const payload = await readJsonResponse(response);
+          loadedItems = Array.isArray(payload?.items) ? (payload.items as GalleryItem[]) : [];
+          break;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error("Failed to load gallery.");
+        }
+      }
+
+      if (!loadedItems) {
+        throw lastError || new Error("Failed to load gallery.");
+      }
+
+      setGalleryItems(loadedItems);
+      setSelectedGalleryKeys((current) => current.filter((key) => loadedItems.some((item) => item.objectKey === key)));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to load gallery.");
+    } finally {
+      setIsGalleryLoading(false);
+    }
+  };
+
   const handleLogin = () => {
     if (username === AUTH_USERNAME && password === AUTH_PASSWORD) {
       window.sessionStorage.setItem(AUTH_STORAGE_KEY, "true");
@@ -157,6 +213,61 @@ function App() {
     setUsername("");
     setPassword("");
     setAuthError("");
+  };
+
+  const toggleGallerySelection = (objectKey: string) => {
+    setSelectedGalleryKeys((current) =>
+      current.includes(objectKey) ? current.filter((key) => key !== objectKey) : [...current, objectKey],
+    );
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedGalleryKeys.length === 0) {
+      setErrorMessage("Select one or more photos before deleting.");
+      return;
+    }
+
+    setIsDeleting(true);
+    setErrorMessage("");
+
+    try {
+      let deleteSucceeded = false;
+      let lastError: Error | null = null;
+
+      for (const target of buildApiTargets("delete-gallery")) {
+        try {
+          const response = await fetch(target, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              objectKeys: selectedGalleryKeys,
+            }),
+          });
+
+          if (!response.ok) {
+            throw await createUploadError(response);
+          }
+
+          deleteSucceeded = true;
+          break;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error("Delete failed.");
+        }
+      }
+
+      if (!deleteSucceeded) {
+        throw lastError || new Error("Delete failed.");
+      }
+
+      setGalleryItems((current) => current.filter((item) => !selectedGalleryKeys.includes(item.objectKey)));
+      setSelectedGalleryKeys([]);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to delete gallery items.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleUpload = async () => {
@@ -182,7 +293,7 @@ function App() {
       let uploadSucceeded = false;
       let lastError: Error | null = null;
 
-      for (const target of buildUploadTargets()) {
+      for (const target of buildApiTargets("upload")) {
         try {
           const uploadResponse = await fetch(target, {
             method: "POST",
@@ -214,6 +325,16 @@ function App() {
         fileUrl: uploadPayload.fileUrl,
         objectKey: uploadPayload.objectKey,
       });
+      setGalleryItems((current) => {
+        const nextItem = {
+          fileUrl: uploadPayload.fileUrl,
+          objectKey: uploadPayload.objectKey,
+          lastModified: new Date().toISOString(),
+        };
+
+        return [nextItem, ...current.filter((item) => item.objectKey !== nextItem.objectKey)];
+      });
+      setSelectedGalleryKeys([]);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Upload failed.");
     } finally {
@@ -347,6 +468,7 @@ function App() {
           <a href="#home">Home</a>
           <a href="#about">About</a>
           <a href="#upload">Upload</a>
+          <a href="#gallery">Gallery</a>
         </nav>
 
         <div className="header-actions">
@@ -551,6 +673,101 @@ function App() {
               ) : null}
             </div>
           </div>
+        </section>
+
+        <section className="gallery-section" id="gallery">
+          <div className="section-heading gallery-heading">
+            <div>
+              <p className="eyebrow">Showcase gallery</p>
+              <h2>Photo gallery stored in your S3 bucket.</h2>
+            </div>
+
+            <div className="gallery-actions">
+              <button className="secondary-link refresh-gallery" type="button" onClick={() => void loadGallery()}>
+                <RefreshCcw className={isGalleryLoading ? "spin" : ""} />
+                Refresh gallery
+              </button>
+              <button
+                className="secondary-link delete-gallery"
+                type="button"
+                onClick={() => void handleDeleteSelected()}
+                disabled={selectedGalleryKeys.length === 0 || isDeleting}
+              >
+                {isDeleting ? <LoaderCircle className="spin" /> : <Trash2 />}
+                Delete selected
+              </button>
+            </div>
+          </div>
+
+          <div className="gallery-summary">
+            <div className="tip-card">
+              <Images />
+              <div>
+                <strong>Images from cloud storage</strong>
+                <span>Uploaded photos are loaded directly from your S3 bucket and shown here.</span>
+              </div>
+            </div>
+            <div className="tip-card">
+              <CheckSquare />
+              <div>
+                <strong>Multi-select enabled</strong>
+                <span>Select one or many photos, then use delete to remove them from S3.</span>
+              </div>
+            </div>
+          </div>
+
+          {selectedGalleryKeys.length > 0 ? (
+            <div className="status-card">
+              <strong>{selectedGalleryKeys.length} photo(s) selected</strong>
+              <p>You can now delete the selected photo or multiple selected photos from the gallery.</p>
+            </div>
+          ) : null}
+
+          {galleryItems.length > 0 ? (
+            <div className="gallery-grid">
+              {galleryItems.map((item) => {
+                const isSelected = selectedGalleryKeys.includes(item.objectKey);
+
+                return (
+                  <article
+                    className={`gallery-card${isSelected ? " gallery-card-selected" : ""}`}
+                    key={item.objectKey}
+                    onClick={() => toggleGallerySelection(item.objectKey)}
+                  >
+                    <button
+                      className={`gallery-select${isSelected ? " gallery-select-active" : ""}`}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleGallerySelection(item.objectKey);
+                      }}
+                    >
+                      {isSelected ? <CheckSquare /> : <CheckSquare />}
+                      <span>{isSelected ? "Selected" : "Select"}</span>
+                    </button>
+                    <img className="gallery-image" src={item.fileUrl} alt={item.objectKey} loading="lazy" />
+                    <div className="gallery-card-body">
+                      <strong>{item.objectKey.split("/").pop()}</strong>
+                      <span>{item.lastModified ? new Date(item.lastModified).toLocaleString() : "Stored in S3"}</span>
+                      <a
+                        href={item.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        Open image
+                      </a>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="status-card">
+              <strong>{isGalleryLoading ? "Loading gallery..." : "No photos found yet"}</strong>
+              <p>Upload an image file and it will appear here as part of your S3 showcase gallery.</p>
+            </div>
+          )}
         </section>
       </main>
     </div>

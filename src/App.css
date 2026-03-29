@@ -479,8 +479,117 @@
 }
 
 .about-section,
-.upload-section {
+.upload-section,
+.gallery-section {
   padding-top: 64px;
+}
+
+.gallery-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.gallery-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gallery-summary {
+  margin-top: 24px;
+}
+
+.refresh-gallery svg {
+  width: 16px;
+  height: 16px;
+}
+
+.gallery-grid {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.gallery-card {
+  position: relative;
+  border: 1px solid var(--surface-border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  border-radius: 26px;
+  overflow: hidden;
+  transition: transform 180ms ease, border-color 180ms ease;
+}
+
+.gallery-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent-two);
+}
+
+.gallery-card-selected {
+  border-color: var(--accent-two);
+  box-shadow: 0 24px 70px rgba(40, 110, 241, 0.18);
+}
+
+.gallery-select {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(15, 23, 42, 0.65);
+  color: #ffffff;
+  padding: 8px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.gallery-select svg,
+.delete-gallery svg {
+  width: 16px;
+  height: 16px;
+}
+
+.gallery-select-active {
+  background: linear-gradient(135deg, var(--accent-one), var(--accent-two));
+}
+
+.gallery-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--drop-bg);
+}
+
+.gallery-card-body {
+  padding: 18px;
+}
+
+.gallery-card-body strong {
+  display: block;
+  color: var(--text-strong);
+}
+
+.gallery-card-body span {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+}
+
+.gallery-card-body a {
+  display: inline-flex;
+  margin-top: 14px;
+  color: var(--link-color);
+  font-weight: 700;
+  text-decoration: none;
 }
 
 .section-heading {
@@ -769,7 +878,8 @@
   .stat-grid,
   .feature-grid,
   .preview-strip,
-  .profile-links {
+  .profile-links,
+  .gallery-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -809,5 +919,9 @@
     inset: auto;
     width: 100%;
     margin-top: 16px;
+  }
+
+  .gallery-actions {
+    width: 100%;
   }
 }
